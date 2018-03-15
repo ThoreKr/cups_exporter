@@ -2,10 +2,11 @@
 
 This exporter provides prometheus metrics for cups by utilizing pycups.
 
+By default it will register on Port 9329 as registered in the [Prometheus Wiki](https://github.com/prometheus/prometheus/wiki/Default-port-allocations)
+
 ```
 usage: cups-exporter.py [-h] [--cups-host CUPS_HOST] [--cups-port CUPS_PORT]
-                        [--cups-user CUPS_USER]
-
+                        [--cups-user CUPS_USER] [--listen-port LISTEN_PORT]
 optional arguments:
   -h, --help            show this help message and exit
   --cups-host CUPS_HOST
@@ -14,6 +15,8 @@ optional arguments:
                         The cups port to use (default: 631)
   --cups-user CUPS_USER
                         The user to connect with (default: default)
+  --listen-port LISTEN_PORT
+                        The port the exporter will listen on (default: 9329)
 ```
 
 The metrics exported are:

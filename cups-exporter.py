@@ -9,6 +9,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.add_argument("--cups-host", help="The cups host to connect to", default="localhost")
 parser.add_argument("--cups-port", type=int, help="The cups port to use", default=631)
 parser.add_argument("--cups-user", help="The user to connect with", default="default")
+parser.add_argument("--listen-port", type=int, help="The port the exporter will listen on", default=9329)
 args = parser.parse_args()
 
 
@@ -41,7 +42,7 @@ def getPrinterStatus(printers):
 
 if __name__ == '__main__':
   # Start up the server to expose the metrics.
-  start_http_server(8000)
+  start_http_server(args.listen_port)
 
   cups.setServer(args.cups_host)
   cups.setPort(args.cups_port)
