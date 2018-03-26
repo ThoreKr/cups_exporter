@@ -2,7 +2,7 @@
 import cups
 import json
 import time
-from prometheus_client import start_http_server, Gauge
+from prometheus_client import start_http_server, Gauge, Counter
 import argparse
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -14,30 +14,30 @@ args = parser.parse_args()
 
 
 # Define Metrics
-printJobsNum = Gauge('cups_print_jobs', 'Number of current print jobs')
+printJobsNum = Gauge('cups_print_jobs_active', 'Number of current print jobs')
+printJobsTotal = Counter('cups_print_jobs_total', 'Total number of print jobs')
 printersNum = Gauge('cups_printers', 'Number of printers')
-printersStatus = Gauge('cups_printer_status', 'Status about printer alerts', ['printer', 'status'])
-dhcpUp = Gauge('cups_up', 'CUPS up')
+printersStatus = Gauge('cups_printer_status', 'Status about printer alerts', ['printer','model', 'status'])
+cupsUp = Gauge('cups_up', 'CUPS up')
 
 
-#@printersNum
 def getPrinterData(conn):
   printers = conn.getPrinters()
   printersNum.set(len(printers))
   return printers
 
-#@printJobsNum
 def getJobData(conn):
+  jobs = conn.getJobs(which_jobs="all")
+  printJobsTotal.inc(len(jobs) - printJobsTotal._value.get())
   jobs = conn.getJobs()
-  printJobsNum.set(len(jobs))
+  printJobsNum = len(jobs)
 
-#@printersStatus
 def getPrinterStatus(printers):
   for key, value in printers.items():
     if value['printer-state-reasons'][0] != 'none':
-      printersStatus.labels(printer=value['printer-make-and-model'], status=value['printer-state-reasons'][0]).set(0)
+      printersStatus.labels(printer=key, model=value['printer-make-and-model'], status=value['printer-state-reasons'][0]).set(0)
     else:
-      printersStatus.labels(printer=value['printer-make-and-model'], status='happy').set(1)
+      printersStatus.labels(printer=key, model=value['printer-make-and-model'], status='happy').set(1)
 
 
 if __name__ == '__main__':
@@ -54,9 +54,10 @@ if __name__ == '__main__':
       printers = getPrinterData(conn)
       getJobData(conn)
       getPrinterStatus(printers)
-      dhcpUp.set(1)
+      cupsUp.set(1)
     except Exception as e:
-      dhcpUp.set(0)
+      cupsUp.set(0)
       print(e)
 
     time.sleep(5)
+
