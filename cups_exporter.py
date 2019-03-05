@@ -30,7 +30,7 @@ def getJobData(conn):
   jobs = conn.getJobs(which_jobs="all")
   printJobsTotal.inc(len(jobs) - printJobsTotal._value.get())
   jobs = conn.getJobs()
-  printJobsNum = len(jobs)
+  printJobsNum.set(len(jobs))
 
 def getPrinterStatus(printers):
   for key, value in printers.items():
