@@ -1,68 +1,146 @@
 #!/usr/bin/env python3
-import cups
-import json
-import time
-from prometheus_client import start_http_server, Gauge, Counter
-import argparse
+"""Export CUPS metrics to prometheus
+"""
 
-parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("--cups-host", help="The cups host to connect to", default="localhost")
-parser.add_argument("--cups-port", type=int, help="The cups port to use", default=631)
-parser.add_argument("--cups-user", help="The user to connect with", default="default")
-parser.add_argument("--listen-port", type=int, help="The port the exporter will listen on", default=9329)
+import argparse
+import time
+
+import cups
+from prometheus_client import start_http_server
+from prometheus_client.core import (REGISTRY, CounterMetricFamily,
+                                    GaugeMetricFamily)
+
+parser = argparse.ArgumentParser(
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument(
+    "--cups-host", help="The cups host to connect to", default="localhost")
+parser.add_argument("--cups-port", type=int,
+                    help="The cups port to use", default=631)
+parser.add_argument(
+    "--cups-user", help="The user to connect with", default="default")
+parser.add_argument("--listen-port", type=int,
+                    help="The port the exporter will listen on", default=9329)
 args = parser.parse_args()
 
 
-# Define Metrics
-printJobsNum = Gauge('cups_print_jobs_active', 'Number of current print jobs')
-printJobsTotal = Counter('cups_print_jobs_total', 'Total number of print jobs')
-printersNum = Gauge('cups_printers', 'Number of printers')
-printersStatus = Gauge('cups_printer_status', 'Status about printer alerts', ['printer','model', 'status'])
-cupsUp = Gauge('cups_up', 'CUPS up')
+class CUPSCollector:
+    """CUPSCollector collects status data about
+    currently configured printers in cups
+    """
 
+    def __init__(self, host, port, user):
+        """Set cups connection parameters
 
-def getPrinterData(conn):
-  printers = conn.getPrinters()
-  printersNum.set(len(printers))
-  return printers
+        Arguments:
+            host {str} -- Cups Hostname
+            port {int} -- Cups Port
+            user {str} -- Cups username
+        """
+        self._prometheus_metrics = {}
 
-def getJobData(conn):
-  jobs = []
-  printJobsTotalold = printJobsTotal._value.get()
-  jobs = conn.getJobs(which_jobs="all")
-  lastjobID = jobs.keys()[-1]
-  printJobsTotalnew = lastjobID
-  printJobsTotal.inc(printJobsTotalnew - printJobsTotalold)
-  jobs = conn.getJobs()
-  printJobsNum.set(len(jobs))
+        cups.setServer(host)
+        cups.setPort(port)
+        cups.setUser(user)
 
+        self.conn = cups.Connection()
 
-def getPrinterStatus(printers):
-  for key, value in printers.items():
-    if value['printer-state-reasons'][0] != 'none':
-      printersStatus.labels(printer=key, model=value['printer-make-and-model'], status=value['printer-state-reasons'][0]).set(0)
-    else:
-      printersStatus.labels(printer=key, model=value['printer-make-and-model'], status='happy').set(1)
+    def collect(self):
+        """Collects the metrics from cups
+        """
+        start = time.time()
+
+        self._setup_empty_prometheus_metrics()
+
+        try:
+            printers = self.conn.getPrinters()
+            self._prometheus_metrics['printersNum'].add_metric(
+                [],
+                len(printers))
+
+            self._getPrinterStatus(printers)
+            self._getJobData()
+
+            self._prometheus_metrics['cupsUp'].add_metric([], 1)
+        except Exception as e:
+            self._prometheus_metrics['cupsUp'].add_metric([], 0)
+            print(e)
+
+        duration = time.time() - start
+        self._prometheus_metrics['scrape_duration_seconds'].add_metric(
+            [], duration)
+
+        for metric in self._prometheus_metrics.values():
+            yield metric
+
+    def _setup_empty_prometheus_metrics(self):
+        """
+        The metrics we want to export.
+        """
+        self._prometheus_metrics = {
+            'printJobsNum':
+                GaugeMetricFamily('cups_print_jobs_active',
+                                  'Number of current print jobs'),
+            'printJobsTotal':
+                CounterMetricFamily('cups_print_jobs_total',
+                                    'Total number of print jobs'),
+            'printersNum':
+                GaugeMetricFamily('cups_printers',
+                                  'Number of printers'),
+            'printerStatus':
+                GaugeMetricFamily('cups_printer_status_info',
+                                  'Status about printer alerts',
+                                  labels=['printer', 'model', 'status']),
+            'cupsUp':
+                GaugeMetricFamily('cups_up',
+                                  'CUPS status'),
+            'scrape_duration_seconds':
+                GaugeMetricFamily('cups_scrape_duration_seconds',
+                                  'Amount of time each scrape takes',
+                                  labels=[])
+        }
+
+    def _getJobData(self):
+        """Collects data about cups
+        """
+        jobs = []
+        jobs = self.conn.getJobs(which_jobs="all")
+
+        lastjobID = list(jobs.keys())[-1]
+        self._prometheus_metrics['printJobsTotal'].add_metric(
+            [], lastjobID)
+
+        jobs = self.conn.getJobs()
+        self._prometheus_metrics['printJobsNum'].add_metric(
+            [],
+            len(jobs))
+
+    def _getPrinterStatus(self, printers):
+        """Gathers printer status data
+
+        Arguments:
+            printers {dict} -- dict of printers
+        """
+        for key, value in printers.items():
+            if value['printer-state-reasons'][0] != 'none':
+                self._prometheus_metrics['printerStatus'].add_metric([
+                    key,
+                    value['printer-make-and-model'],
+                    value['printer-state-reasons'][0]],
+                    0)
+            else:
+                self._prometheus_metrics['printerStatus'].add_metric([
+                    key,
+                    value['printer-make-and-model'],
+                    'happy'],
+                    1)
 
 
 if __name__ == '__main__':
-  # Start up the server to expose the metrics.
-  start_http_server(args.listen_port)
-
-  cups.setServer(args.cups_host)
-  cups.setPort(args.cups_port)
-  cups.setUser(args.cups_user)
-
-  while True:
-    try:
-      conn = cups.Connection()
-      printers = getPrinterData(conn)
-      getJobData(conn)
-      getPrinterStatus(printers)
-      cupsUp.set(1)
-    except Exception as e:
-      cupsUp.set(0)
-      print(e)
-
-    time.sleep(5)
-
+    # Start up the server to expose the metrics.
+    REGISTRY.register(CUPSCollector(
+        args.cups_host,
+        args.cups_port,
+        args.cups_user))
+    start_http_server(args.listen_port)
+    while True:
+        time.sleep(1)
