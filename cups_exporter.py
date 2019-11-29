@@ -42,8 +42,6 @@ class CUPSCollector:
         cups.setPort(port)
         cups.setUser(user)
 
-        self.conn = cups.Connection()
-
     def collect(self):
         """Collects the metrics from cups
         """
@@ -52,13 +50,15 @@ class CUPSCollector:
         self._setup_empty_prometheus_metrics()
 
         try:
-            printers = self.conn.getPrinters()
+            conn = cups.Connection()
+
+            printers = conn.getPrinters()
             self._prometheus_metrics['printersNum'].add_metric(
                 [],
                 len(printers))
 
             self._getPrinterStatus(printers)
-            self._getJobData()
+            self._getJobData(conn)
 
             self._prometheus_metrics['cupsUp'].add_metric([], 1)
         except Exception as e:
@@ -99,20 +99,20 @@ class CUPSCollector:
                                   labels=[])
         }
 
-    def _getJobData(self):
+    def _getJobData(self, conn):
         """Collects data about cups
         """
-        jobs = self.conn.getJobs(which_jobs="all")
+        jobs = conn.getJobs(which_jobs="all")
         if len(jobs) == 0:
-            self._prometheus_metrics['printJobsTotal'].add_metric([],0)
+            self._prometheus_metrics['printJobsTotal'].add_metric([], 0)
         else:
             lastjobID = list(jobs.keys())[-1]
             self._prometheus_metrics['printJobsTotal'].add_metric(
                 [], lastjobID)
 
-        jobs = self.conn.getJobs()
+        jobs = conn.getJobs()
         if len(jobs) == 0:
-            self._prometheus_metrics['printJobsNum'].add_metric([],0)
+            self._prometheus_metrics['printJobsNum'].add_metric([], 0)
         else:
             self._prometheus_metrics['printJobsNum'].add_metric(
                 [],
