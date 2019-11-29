@@ -102,17 +102,21 @@ class CUPSCollector:
     def _getJobData(self):
         """Collects data about cups
         """
-        jobs = []
         jobs = self.conn.getJobs(which_jobs="all")
-
-        lastjobID = list(jobs.keys())[-1]
-        self._prometheus_metrics['printJobsTotal'].add_metric(
-            [], lastjobID)
+        if len(jobs) == 0:
+            self._prometheus_metrics['printJobsTotal'].add_metric([],0)
+        else:
+            lastjobID = list(jobs.keys())[-1]
+            self._prometheus_metrics['printJobsTotal'].add_metric(
+                [], lastjobID)
 
         jobs = self.conn.getJobs()
-        self._prometheus_metrics['printJobsNum'].add_metric(
-            [],
-            len(jobs))
+        if len(jobs) == 0:
+            self._prometheus_metrics['printJobsNum'].add_metric([],0)
+        else:
+            self._prometheus_metrics['printJobsNum'].add_metric(
+                [],
+                len(jobs))
 
     def _getPrinterStatus(self, printers):
         """Gathers printer status data
