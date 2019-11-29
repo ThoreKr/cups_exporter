@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- [#5](https://github.com/ThoreKr/cups_exporter/pull/5) Add a Dockerfile (and add automatic builds on DockerHub)
 - [#7](https://github.com/ThoreKr/cups_exporter/issues/6) Fix a bug where incomplete responses were returned if the list of print jobs was empty.
 - [#7](https://github.com/ThoreKr/cups_exporter/issues/7) Do not keep a persistent connection to cups to survive cups restarts.
 
