@@ -38,9 +38,10 @@ class CUPSCollector:
         """
         self._prometheus_metrics = {}
 
-        cups.setServer(host)
-        cups.setPort(port)
-        cups.setUser(user)
+        self.host = host
+        self.port = port
+        self.user = user
+
 
     def collect(self):
         """Collects the metrics from cups
@@ -48,6 +49,10 @@ class CUPSCollector:
         start = time.time()
 
         self._setup_empty_prometheus_metrics()
+
+        cups.setServer(self.host)
+        cups.setPort(self.port)
+        cups.setUser(self.user)
 
         try:
             conn = cups.Connection()
